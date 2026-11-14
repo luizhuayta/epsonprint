@@ -22,8 +22,9 @@ escanear.
 
 - Detección automática de impresoras CUPS (preseleccionada la `Epson_L375`) y del
   escáner SANE (`epson2`), con botón de refrescar.
-- Imprimir PDF e imágenes (JPG/PNG) con vista previa por hoja, tamaño de papel,
-  orientación, copias, dúplex, escalado (ajustar a página / tamaño real / porcentaje).
+- Imprimir PDF e imágenes (JPG/PNG) con vista previa por hoja, tamaño de papel
+  (por defecto **A4**, no el Letter que trae el PPD), orientación, copias y
+  escalado (ajustar a página / tamaño real / porcentaje).
 - Escanear por placa (flatbed) con modo (color/gris/línea), resolución (150/300/600),
   vista de cada página escaneada, borrar página, y guardar todo como un PDF.
 - Flujo "documento a dos caras": tras cada cara la app indica girar el papel y espera
@@ -32,6 +33,10 @@ escanear.
 
 ## No-metas (v1)
 
+- **Dúplex al imprimir** — decisión de Luis: la L375 no tiene dúplex automático
+  (PPD sin opción `sides`); el flujo manual guiado queda pospuesto
+  (ver `docs/mejoras-futuras.md`).
+- **Recorte automático del escaneo** — decisión de Luis: hoja completa A4, como hoy.
 - Archivos Office (Excel/Word) — decisión de Luis: v1 solo PDF e imágenes. Llegarían
   después convirtiendo con LibreOffice por debajo.
 - OCR, fax, niveles de tinta, gestión de colas de impresión, ADF.
@@ -57,7 +62,7 @@ escanear.
 
 | | Enfoque | Cambio | Por qué no (o sí) |
 |---|---|---|---|
-| **A ✅** | Rust puro: **egui** (ventana) + **exprim** (PDF: abrir, previsualizar, imprimir vía CUPS) + **scanimage** (escáner) | Sin FFI; exprim trae papel/márgenes/dúplex/escala, vista previa para GUI y un `FileSpooler` para tests. Escogido. | Riesgo: exprim v0.4 (joven). Mitigación: versión fijada; plan B = `lp` directo + `pdftoppm`, ambos presentes. |
+| **A ✅** | Rust puro: **egui** (ventana) + **exprim** (PDF: abrir, previsualizar, imprimir vía CUPS) + **scanimage** (escáner) | Sin FFI; exprim trae papel/márgenes/escala, vista previa para GUI y un `FileSpooler` para tests. Escogido. | Riesgo: exprim v0.4 (joven). Mitigación: versión fijada; **validado el 2026-11-14 en esta máquina** (compila con Rust 1.100, detecta la `Epson_L375` con CUPS en español, vista previa OK); plan B = `lp` directo + `pdftoppm`, ambos presentes. |
 | B | Bindings nativos: `cups_rs` + `sane-sys` + `pdfium-render` | FFI a librerías C. | Más frágil de compilar, más código, cero beneficio para el usuario. |
 | C | Tauri (Rust + UI web) | UI moderna rápida. | Arrastra WebView + JavaScript; más piezas; menos "nativo". |
 
@@ -92,10 +97,15 @@ src/
   app alterna el aviso «Coloca la otra cara y pulsa Escanear» / «Página lista».
   Las páginas se numeran 1, 2, 3… en orden de escaneo; borrar página permite repetir
   una cara.
-- Guardar escaneo: PDF único en `~/Escaneos/AAAA-MM-DD_HHMM.pdf` (carpeta creada si
+- Guardar escaneo: PDF único a **hoja completa A4** (decisión de Luis: sin recorte
+  automático) en `~/Escaneos/AAAA-MM-DD_HHMM.pdf` (carpeta creada si
   no existe) con botón «Abrir carpeta».
 - Hilos: escaneo e impresión corren en `std::thread` con canal de resultados hacia la
   UI; cancelación del escaneo matando el subproceso.
+- Entrega: además del binario, un script `instalar.sh` (decisión de Luis) que lo copia
+  a `~/.local/bin/epsonprint` y crea
+  `~/.local/share/applications/epsonprint.desktop` con icono — queda en el menú de
+  aplicaciones como una app nativa, sin root ni tocar configuración del sistema.
 
 ### Dependencias (todas puras Rust)
 
@@ -131,4 +141,5 @@ src/
 - Skills: brainstorming + ponytail (activo) + TDD en la implementación. No hace falta
   instalar ninguna skill extra de Rust; si aparece una necesidad concreta, se
   instalará **a nivel proyecto**, nunca global (regla de Luis).
+- Lo que se pospone a propósito vive en `docs/mejoras-futuras.md`.
 - Entrega académica/estilo: este documento es la fuente de verdad del diseño.
