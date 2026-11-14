@@ -1,3 +1,4 @@
+mod nucleo;
 mod ui;
 
 use iced::widget::{button, column, container, row, text};
