@@ -1,6 +1,7 @@
 # Diseño: PrintDesk — estudio de impresión y escaneo para la Epson L375
 
-Fecha: 2026-11-14 (v2, tras revisión de Luis) · Estado: pendiente de aprobación ·
+Fecha: 2026-11-14 (v2, tras revisión de Luis) · Estado: **aprobado por Luis**
+(2026-11-14, tras ver la maqueta interactiva) ·
 Rama: `feat/app-impresora-escaner` (main intacto)
 
 ## Intención y por qué
