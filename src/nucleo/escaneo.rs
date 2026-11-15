@@ -74,12 +74,30 @@ pub fn escanear(
     binario: &str,
 ) -> Result<PaginaEscaneada, ErrorEscaneo> {
     let args = args_scanimage(dispositivo, o);
-    let mut hijo = Command::new(binario)
-        .args(&args)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
+    // ETXTBSY (26): ejecutar un binario recién escrito (tests con scripts
+    // falsos) puede llegar antes de que el VFS lo suelte. Reintentar es el
+    // remedio clásico; en producción (scanimage real) nunca se da.
+    let mut hijo = None;
+    for intento in 0..3 {
+        match Command::new(binario)
+            .args(&args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(h) => {
+                hijo = Some(h);
+                break;
+            }
+            Err(e)
+                if e.raw_os_error() == Some(26) && intento < 2 =>
+            {
+                std::thread::sleep(Duration::from_millis(120));
+            }
+            Err(e) => return Err(ErrorEscaneo::Scanimage(e.to_string())),
+        }
+    }
+    let mut hijo = hijo.expect("spawn con reintentos");
 
     let mut cancelado = false;
     loop {
@@ -181,7 +199,10 @@ mod tests {
         });
         let res = escanear("dev", &OpcionesEscaneo::predeterminadas(), cancel, &bin);
         hilo.join().unwrap();
-        assert!(matches!(res, Err(ErrorEscaneo::Cancelado)));
+        assert!(
+            matches!(res, Err(ErrorEscaneo::Cancelado)),
+            "resultado: {res:?}"
+        );
         assert!(inicio.elapsed() < Duration::from_secs(3), "tardó {:?}", inicio.elapsed());
     }
 
