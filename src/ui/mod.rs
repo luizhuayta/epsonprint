@@ -1,6 +1,7 @@
 //! Estado global, mensajes, navegación y composición de la ventana.
 
 pub mod hilos;
+pub mod imprimir;
 pub mod inicio;
 pub mod tema;
 pub mod widgets;
@@ -11,6 +12,7 @@ use iced::widget::{button, column, container, row, text};
 use iced::{Color, Element, Length, Subscription};
 
 use crate::nucleo::dispositivos::{self, Dispositivos};
+use crate::nucleo::impresion as nucleo_impresion;
 use crate::nucleo::trabajos::{self, Trabajo};
 
 use tema::Tokens;
@@ -40,6 +42,7 @@ pub enum Mensaje {
     Ir(Pagina),
     AlternarTema,
     DispositivosDetectados(Dispositivos),
+    Imprimir(imprimir::MensajeImprimir),
 }
 
 #[derive(Debug)]
@@ -49,6 +52,7 @@ pub struct Estado {
     pub dispositivos: Option<Dispositivos>,
     pub recientes: Vec<Trabajo>,
     pub dir_datos: PathBuf,
+    pub imp: imprimir::EstadoImprimir,
 }
 
 pub fn dir_datos() -> PathBuf {
@@ -66,6 +70,7 @@ pub fn boot() -> Estado {
         dispositivos: None,
         recientes,
         dir_datos,
+        imp: imprimir::EstadoImprimir::default(),
     }
 }
 
@@ -74,16 +79,85 @@ pub fn update(estado: &mut Estado, mensaje: Mensaje) {
         Mensaje::Ir(p) => estado.pagina = p,
         Mensaje::AlternarTema => estado.modo_oscuro = !estado.modo_oscuro,
         Mensaje::DispositivosDetectados(d) => estado.dispositivos = Some(d),
+        // Abrir lanza el diálogo en un hilo (suscripción); el resto es suyo.
+        Mensaje::Imprimir(imprimir::MensajeImprimir::Abrir) => {
+            estado.imp.abriendo = true;
+            estado.imp.id_abrir += 1;
+        }
+        Mensaje::Imprimir(m) => {
+            let dir = estado.dir_datos.clone();
+            imprimir::update(&mut estado.imp, m, &dir);
+        }
     }
 }
 
+fn impresora_actual(estado: &Estado) -> Option<String> {
+    estado
+        .dispositivos
+        .as_ref()?
+        .impresoras
+        .iter()
+        .find(|i| i.por_defecto)
+        .or_else(|| estado.dispositivos.as_ref()?.impresoras.first())
+        .map(|i| i.nombre.clone())
+}
+
 pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
-    if estado.dispositivos.is_some() {
-        Subscription::none()
-    } else {
-        hilos::trabajo(1, dispositivos::detectar)
-            .map(envolver_dispositivos)
+    use imprimir::MensajeImprimir as MI;
+    use iced::Subscription;
+
+    let mut lotes: Vec<Subscription<Mensaje>> = Vec::new();
+
+    if estado.dispositivos.is_none() {
+        lotes.push(hilos::trabajo(1, dispositivos::detectar).map(envolver_dispositivos));
     }
+
+    if let Some(doc) = &estado.imp.documento {
+        // Vista previa: relanzada con id nuevo al cambiar opciones o documento.
+        if estado.imp.previsualizando {
+            let bytes = doc.bytes.clone();
+            let opts = estado.imp.opciones.clone();
+            lotes.push(
+                hilos::trabajo(1000 + estado.imp.id_preview, move || {
+                    nucleo_impresion::previsualizar(&bytes, &opts).map_err(|e| e.to_string())
+                })
+                .map(|res| Mensaje::Imprimir(MI::HojasPrevisualizadas(res))),
+            );
+        }
+        // Envío real a CUPS.
+        if estado.imp.imprimiendo {
+            if let Some(impresora) = impresora_actual(estado) {
+                let bytes = doc.bytes.clone();
+                let titulo = doc.nombre.clone();
+                let opts = estado.imp.opciones.clone();
+                lotes.push(
+                    hilos::trabajo(2000 + estado.imp.id_impresion, move || {
+                        let tmp = std::env::temp_dir().join("printdesk");
+                        let _ = std::fs::create_dir_all(&tmp);
+                        nucleo_impresion::imprimir_cups(
+                            &impresora,
+                            &bytes,
+                            &titulo,
+                            &opts,
+                            "lp",
+                            &tmp,
+                        )
+                        .map_err(|e| e.to_string())
+                    })
+                    .map(|res| Mensaje::Imprimir(MI::Impreso(res))),
+                );
+            }
+        }
+    }
+
+    if estado.imp.abriendo {
+        lotes.push(
+            hilos::trabajo(3000 + estado.imp.id_abrir, imprimir::abrir_documento)
+                .map(|res| Mensaje::Imprimir(MI::DocumentoCargado(res))),
+        );
+    }
+
+    Subscription::batch(lotes)
 }
 
 fn envolver_dispositivos(d: Dispositivos) -> Mensaje {
@@ -101,6 +175,9 @@ pub fn view(estado: &Estado) -> Element<'_, Mensaje> {
 
     let contenido = container(match estado.pagina {
         Pagina::Inicio => inicio::vista(&t, &estado.dispositivos, &estado.recientes),
+        Pagina::Imprimir => {
+            imprimir::vista(&t, &estado.imp, impresora_actual(estado).as_deref())
+        }
         otra => Element::from(
             column![
                 text(otra.titulo()).size(20.0).color(color(t.texto)),

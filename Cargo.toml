@@ -7,7 +7,7 @@ edition = "2024"
 chrono = "0.4.45"
 dirs = "7.0.0"
 exprim = { version = "0.4.0", features = ["print"] }
-iced = { version = "0.14.0", features = ["image", "svg"] }
+iced = { version = "0.14.0", features = ["advanced", "image", "svg"] }
 image = "0.25.10"
 rfd = "0.18.0"
 serde = { version = "1.0.229", features = ["derive"] }

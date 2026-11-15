@@ -188,6 +188,17 @@ impl From<std::io::Error> for ErrorImpresion {
     }
 }
 
+impl std::fmt::Display for ErrorImpresion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorImpresion::Abrir(e) => write!(f, "el documento no se pudo abrir ({e})"),
+            ErrorImpresion::Imprimir(e) => write!(f, "error de impresión: {e}"),
+            ErrorImpresion::Io(e) => write!(f, "error de disco: {e}"),
+            ErrorImpresion::Lp(e) => write!(f, "CUPS rechazó el trabajo: {e}"),
+        }
+    }
+}
+
 /// Vista previa fiel: PNG por hoja, tal como saldrá en papel.
 pub fn previsualizar(pdf: &[u8], opts: &OpcionesImpresion) -> Result<Vec<Vec<u8>>, ErrorImpresion> {
     let bytes: Arc<[u8]> = pdf.into();

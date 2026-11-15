@@ -6,12 +6,12 @@
 //! (una imagen por página, ocupando toda la página). El PDF se reabre con
 //! exprim en los tests: si estuviera mal, el test lo canta.
 
-use std::io::Cursor;
+
 use std::path::{Path, PathBuf};
 
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::{rotate180, rotate270, rotate90};
-use image::{DynamicImage, ExtendedColorType, ImageEncoder as _, ImageFormat};
+use image::{DynamicImage, ExtendedColorType, ImageEncoder as _};
 
 /// Una página escaneada en memoria: PNG tal cual lo devuelve scanimage,
 /// más la rotación acumulada en grados (0/90/180/270, horario).
@@ -162,11 +162,13 @@ fn a_jpeg_rotado(bytes: &[u8], rotacion: u32) -> Result<PaginaJpeg, ErrorPdf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::ImageFormat;
+    use std::io::Cursor as IoCursor;
     use std::sync::Arc;
 
     fn png_color(ancho: u32, alto: u32) -> Vec<u8> {
         let img = image::RgbaImage::from_pixel(ancho, alto, image::Rgba([180, 60, 60, 255]));
-        let mut buf = Cursor::new(Vec::new());
+        let mut buf = IoCursor::new(Vec::new());
         DynamicImage::ImageRgba8(img)
             .write_to(&mut buf, ImageFormat::Png)
             .unwrap();
