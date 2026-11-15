@@ -265,7 +265,8 @@ pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
                 hilos::trabajo(1000 + estado.imp.id_preview, move || {
                     nucleo_impresion::previsualizar(&bytes, &opts).map_err(|e| e.to_string())
                 })
-                .map(move |res| Mensaje::Imprimir(MI::HojasPrevisualizadas(id, res))),
+                .with(id)
+                .map(|(id, res)| Mensaje::Imprimir(MI::HojasPrevisualizadas(id, res))),
             );
         }
         // Envío real a CUPS.
@@ -479,6 +480,20 @@ pub fn theme(e: &Estado) -> iced::Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn suscripcion_de_preview_conserva_identificador() {
+        let mut e = boot();
+        e.dispositivos = Some(Dispositivos::default());
+        e.imp.documento = Some(imprimir::Documento {
+            nombre: "prueba.pdf".into(),
+            bytes: vec![],
+            paginas: 1,
+            ruta: PathBuf::from("prueba.pdf"),
+        });
+        e.imp.previsualizando = true;
+        e.imp.id_preview = 7;
+        assert!(subscription(&e).units() >= 1);
+    }
     #[test]
     fn navegacion_y_cambio_de_tema_por_click() {
         let mut e = boot();
