@@ -20,6 +20,7 @@ pub enum MensajeDni {
     Escanear,
     PaginaLista(PaginaEscaneada),
     Repetir,
+    Fallo,
     Cancelar,
 }
 
@@ -71,6 +72,12 @@ impl AsistenteDni {
                 self.reverso = Some(p);
                 self.paso = PasoDni::Completo;
             }
+            (PasoDni::EscaneandoAnverso, MensajeDni::Fallo) => self.paso = PasoDni::EsperandoAnverso,
+            (PasoDni::EscaneandoReverso, MensajeDni::Fallo) => self.paso = PasoDni::EsperandoReverso,
+            (PasoDni::Completo, MensajeDni::Repetir) => {
+                self.reverso = None;
+                self.paso = PasoDni::EsperandoReverso;
+            }
             (PasoDni::Completo, MensajeDni::PaginaLista(_)) => {
                 // Encadenar el siguiente DNI.
                 self.anverso = None;
@@ -107,6 +114,29 @@ mod tests {
 
     fn pagina_de_prueba() -> PaginaEscaneada {
         PaginaEscaneada { png: vec![1, 2, 3], rotacion: 0 }
+    }
+
+    #[test]
+    fn fallo_del_reverso_conserva_anverso() {
+        let mut a = AsistenteDni::nuevo();
+        a.actualizar(MensajeDni::Escanear);
+        a.actualizar(MensajeDni::PaginaLista(pagina_de_prueba()));
+        a.actualizar(MensajeDni::Escanear);
+        a.actualizar(MensajeDni::Fallo);
+        assert_eq!(a.paso(), PasoDni::EsperandoReverso);
+        assert!(a.anverso().is_some());
+    }
+
+    #[test]
+    fn repetir_reverso_completo_no_pierde_anverso() {
+        let mut a = AsistenteDni::nuevo();
+        for _ in 0..2 {
+            a.actualizar(MensajeDni::Escanear);
+            a.actualizar(MensajeDni::PaginaLista(pagina_de_prueba()));
+        }
+        a.actualizar(MensajeDni::Repetir);
+        assert_eq!(a.paso(), PasoDni::EsperandoReverso);
+        assert!(a.anverso().is_some() && a.reverso().is_none());
     }
 
     #[test]
