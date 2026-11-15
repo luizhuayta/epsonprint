@@ -1,6 +1,7 @@
 //! Estado global, mensajes, navegación y composición de la ventana.
 
 pub mod hilos;
+pub mod escanear;
 pub mod imprimir;
 pub mod inicio;
 pub mod tema;
@@ -43,6 +44,7 @@ pub enum Mensaje {
     AlternarTema,
     DispositivosDetectados(Dispositivos),
     Imprimir(imprimir::MensajeImprimir),
+    Escanear(escanear::MensajeEscanear),
 }
 
 #[derive(Debug)]
@@ -53,6 +55,7 @@ pub struct Estado {
     pub recientes: Vec<Trabajo>,
     pub dir_datos: PathBuf,
     pub imp: imprimir::EstadoImprimir,
+    pub scan: escanear::EstadoEscanear,
 }
 
 pub fn dir_datos() -> PathBuf {
@@ -71,6 +74,7 @@ pub fn boot() -> Estado {
         recientes,
         dir_datos,
         imp: imprimir::EstadoImprimir::default(),
+        scan: escanear::EstadoEscanear::default(),
     }
 }
 
@@ -87,6 +91,16 @@ pub fn update(estado: &mut Estado, mensaje: Mensaje) {
         Mensaje::Imprimir(m) => {
             let dir = estado.dir_datos.clone();
             imprimir::update(&mut estado.imp, m, &dir);
+        }
+        Mensaje::Escanear(escanear::MensajeEscanear::Escanear) if estado.dispositivos.as_ref().is_none_or(|d| d.escaners.is_empty()) => {
+            estado.scan.aviso = Some("No se detecta un escáner. Conecta la Epson y actualiza los dispositivos.".into());
+        }
+        Mensaje::Escanear(m) => {
+            if let escanear::MensajeEscanear::Guardado(Ok(ref ruta)) = m {
+                let _ = trabajos::registrar(&estado.dir_datos, &Trabajo { nombre: ruta.display().to_string(), detalle: format!("{} páginas", estado.scan.paginas.len()), tipo: trabajos::TipoTrabajo::Escaneo, fecha_unix: chrono::Local::now().timestamp() });
+                estado.recientes = trabajos::recientes(&estado.dir_datos, 20);
+            }
+            escanear::update(&mut estado.scan, m);
         }
     }
 }
@@ -157,6 +171,22 @@ pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
         );
     }
 
+    if estado.scan.escaneando {
+        if let Some(dispositivo) = estado.dispositivos.as_ref().and_then(|d| d.escaners.first()) {
+            let id = dispositivo.id.clone();
+            let opts = estado.scan.opciones;
+            let cancel = estado.scan.cancel.clone();
+            lotes.push(hilos::trabajo(4000 + estado.scan.id, move || escanear::capturar(id, opts, cancel))
+                .map(|res| Mensaje::Escanear(escanear::MensajeEscanear::Lista(res))));
+        }
+    }
+    if estado.scan.guardando {
+        let paginas: Vec<_> = estado.scan.paginas.iter().map(|p| p.pagina.clone()).collect();
+        let opts = estado.scan.opciones;
+        lotes.push(hilos::trabajo(5000 + estado.scan.id, move || escanear::guardar(&paginas, opts.formato_salida, opts.resolucion as u16, &escanear::carpeta(), &chrono::Local::now().format("%Y-%m-%d_%H%M%S").to_string()))
+            .map(|res| Mensaje::Escanear(escanear::MensajeEscanear::Guardado(res))));
+    }
+
     Subscription::batch(lotes)
 }
 
@@ -178,6 +208,7 @@ pub fn view(estado: &Estado) -> Element<'_, Mensaje> {
         Pagina::Imprimir => {
             imprimir::vista(&t, &estado.imp, impresora_actual(estado).as_deref())
         }
+        Pagina::Escanear => escanear::vista(&t, &estado.scan),
         otra => Element::from(
             column![
                 text(otra.titulo()).size(20.0).color(color(t.texto)),

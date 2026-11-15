@@ -1,6 +1,7 @@
 //! Escaneo por subproceso `scanimage` (SANE). Bloqueante por diseño: la UI lo
 //! llama desde un hilo. Cancelable matando el subproceso.
 
+use std::io::Read;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -98,6 +99,17 @@ pub fn escanear(
         }
     }
     let mut hijo = hijo.expect("spawn con reintentos");
+    // Vaciar ambos pipes mientras el escáner escribe; una página supera el búfer del SO.
+    let mut stdout = hijo.stdout.take().expect("stdout piped");
+    let mut stderr = hijo.stderr.take().expect("stderr piped");
+    let lector = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes).map(|_| bytes)
+    });
+    let errores = std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).map(|_| bytes)
+    });
 
     let mut cancelado = false;
     loop {
@@ -113,18 +125,21 @@ pub fn escanear(
         }
     }
     if cancelado {
+        let _ = hijo.wait();
         return Err(ErrorEscaneo::Cancelado);
     }
-    let salida = hijo
-        .wait_with_output()
+    let bytes = lector.join().map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
         .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
-    if !salida.status.success() {
+    let stderr = errores.join().map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
+        .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
+    let estado = hijo.wait().map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
+    if !estado.success() {
         return Err(ErrorEscaneo::Scanimage(
-            String::from_utf8_lossy(&salida.stderr).trim().to_string(),
+            String::from_utf8_lossy(&stderr).trim().to_string(),
         ));
     }
     Ok(PaginaEscaneada {
-        png: salida.stdout,
+        png: bytes,
         rotacion: 0,
     })
 }
@@ -204,6 +219,21 @@ mod tests {
             "resultado: {res:?}"
         );
         assert!(inicio.elapsed() < Duration::from_secs(3), "tardó {:?}", inicio.elapsed());
+    }
+
+    #[test]
+    fn pagina_mayor_que_pipe_no_bloquea() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = script_falso(dir.path(), "scanimage-grande", "head -c 131072 /dev/zero");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let reloj = Arc::clone(&cancel);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            reloj.store(true, Ordering::SeqCst);
+        });
+        let pagina = escanear("dev", &OpcionesEscaneo::predeterminadas(), cancel, &bin)
+            .expect("drenar stdout mientras scanimage sigue vivo");
+        assert_eq!(pagina.png.len(), 131072);
     }
 
     #[test]
