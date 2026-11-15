@@ -223,3 +223,17 @@ Tokens definidos una vez en `ui/tema.rs` y usados por todo widget:
 - Fase 2 planificada en `docs/mejoras-futuras.md` (recorte DNI, Word/Excel,
   dúplex manual guiado…).
 - Este documento (v2) sustituye al v1; las decisiones de Luis quedan marcadas.
+
+## Precisiones verificadas durante la construcción
+
+Esta sección corrige supuestos del diseño, no amplía el alcance aprobado:
+
+- **Iced y egui son viables en Linux**. La tabla inicial simplificaba demasiado egui: tiene `SidePanel` redimensionable y estilos personalizables; no obliga a un aspecto austero. Ninguno renderiza PDF por sí solo. Iced sigue siendo la elección por su modelo estado/mensajes y la preferencia expresada por Luis, no porque egui sea incapaz de este diseño.
+- Las cifras de memoria de una comparativa externa eran de una app en Windows, **no mediciones de PrintDesk en Linux**. No se garantiza que uno sea más rápido o ligero en este equipo. Referencias: https://github.com/iced-rs/iced/releases/tag/0.14.0, https://docs.rs/egui/latest/egui/containers/panel/struct.SidePanel.html, https://docs.rs/iced/0.14.0/iced/widget/image/struct.Viewer.html.
+- Se mantiene **printpdf 0.12.9**, sin funciones HTML: colocar imágenes mediante `Op::UseXobject` y `XObjectTransform` funciona y está probado reabriendo con exprim. La retirada temporal de printpdf se revierte.
+- Exprim prepara las hojas y la vista previa; un envío pequeño mediante `lp` añade opciones del PPD (`MediaType`, `Ink`, `PageSize`) que su interfaz de spooler no transporta. No basta con confiar en `print-quality` para esta L375.
+- El PPD ofrece Normal/Alta para papel normal, no Borrador. El formato foto disponible es **4×6 pulgadas** (101,6 × 152,4 mm), aproximadamente 10×15 cm.
+- Los archivos temporales de impresión son privados y se eliminan; al guardar escaneos no se sobrescriben archivos previos y las páginas permanecen en la sesión. Al cerrar con una sesión pendiente se pide confirmación.
+- La resolución queda fija mientras una sesión contenga páginas, para no cambiar su tamaño físico. Mezclar DPI distintos queda en mejoras posteriores.
+- Arrastrar archivos depende del backend: Iced/winit 0.14 no anuncia `FileDropped` en Wayland; Abrir funciona en ambos. Se atienden eventos de archivos soltados en X11. No se da esta limitación por resuelta.
+- La aceptación física sigue pendiente en `docs/acta-aceptacion.md`; una cola CUPS que acepta trabajos no demuestra que la impresora esté conectada ni que tenga papel.

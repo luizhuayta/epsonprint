@@ -83,7 +83,10 @@ fn fichero(dir: &Path) -> std::path::PathBuf {
 
 /// Añade `trabajo` al principio y recorta a `MAXIMO`. Crea el fichero si no existe.
 pub fn registrar(dir: &Path, trabajo: &Trabajo) -> Result<(), ErrorTrabajos> {
-    let mut lista: Vec<_> = recientes(dir, MAXIMO).iter().map(TrabajoGuardado::from).collect();
+    let mut lista: Vec<_> = recientes(dir, MAXIMO)
+        .iter()
+        .map(TrabajoGuardado::from)
+        .collect();
     lista.insert(0, TrabajoGuardado::from(trabajo));
     lista.truncate(MAXIMO);
     if !dir.exists() {

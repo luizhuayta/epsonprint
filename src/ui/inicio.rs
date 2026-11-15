@@ -2,8 +2,8 @@
 //! y trabajos recientes.
 
 use chrono::TimeZone as _;
-use iced::widget::{column, container, row, text};
 use iced::Element;
+use iced::widget::{column, container, row, text};
 
 use crate::nucleo::dispositivos::Dispositivos;
 use crate::nucleo::trabajos::{TipoTrabajo, Trabajo};
@@ -12,7 +12,11 @@ use super::tema::Tokens;
 use super::widgets::{boton_primario, boton_secundario, chip, color, tarjeta};
 use crate::ui::{Mensaje, Pagina};
 
-pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Trabajo]) -> Element<'static, Mensaje> {
+pub fn vista(
+    t: &Tokens,
+    dispositivos: &Option<Dispositivos>,
+    recientes: &[Trabajo],
+) -> Element<'static, Mensaje> {
     let (nombre, imprime, escanea) = match dispositivos {
         Some(d) => {
             let imprime = d.impresoras.iter().any(|i| i.acepta);
@@ -31,7 +35,7 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
     let tarjeta_dispositivo = tarjeta(
         t,
         row![
-            container(text("🖨").size(34.0))
+            container(super::iconos::icono("imprimir", color(t.primario)))
                 .width(64.0)
                 .height(52.0)
                 .center(iced::Length::Fixed(52.0))
@@ -43,8 +47,24 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
             column![
                 text(nombre.clone()).size(16.0).color(color(t.texto)),
                 row![
-                    chip(t, "Lista para imprimir", imprime),
-                    chip(t, "Escáner disponible", escanea),
+                    chip(
+                        t,
+                        if imprime {
+                            "Cola CUPS acepta trabajos"
+                        } else {
+                            "Cola no disponible"
+                        },
+                        imprime
+                    ),
+                    chip(
+                        t,
+                        if escanea {
+                            "Escáner detectado"
+                        } else {
+                            "Escáner no detectado"
+                        },
+                        escanea
+                    ),
                 ]
                 .spacing(8.0)
             ]
@@ -65,7 +85,9 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
         tarjeta(
             t,
             column![
-                text("Recientes").size(12.0).color(color(t.texto_secundario)),
+                text("Recientes")
+                    .size(12.0)
+                    .color(color(t.texto_secundario)),
                 text("Aún no hay trabajos: lo que imprimas o escanees aparecerá aquí.")
                     .size(12.0)
                     .color(color(t.texto_secundario)),
@@ -73,9 +95,11 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
             .spacing(6.0),
         )
     } else {
-        let mut lista = column![text("Recientes")
-            .size(12.0)
-            .color(color(t.texto_secundario))]
+        let mut lista = column![
+            text("Recientes")
+                .size(12.0)
+                .color(color(t.texto_secundario))
+        ]
         .spacing(4.0);
         for trabajo in recientes.iter().take(5) {
             let etiqueta = match trabajo.tipo {
@@ -89,10 +113,22 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
                 .unwrap_or_default();
             lista = lista.push(
                 row![
-                    text(trabajo.nombre.clone()).size(12.0).color(color(t.texto)),
+                    text(
+                        std::path::Path::new(&trabajo.nombre)
+                            .file_name()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| trabajo.nombre.clone())
+                    )
+                    .size(12.0)
+                    .color(color(t.texto)),
                     text(format!("{} · {} · {}", trabajo.detalle, etiqueta, fecha))
                         .size(11.0)
                         .color(color(t.texto_secundario)),
+                    boton_secundario(
+                        t,
+                        "Reabrir",
+                        Mensaje::Reabrir(std::path::PathBuf::from(&trabajo.nombre))
+                    ),
                 ]
                 .spacing(8.0)
                 .align_y(iced::Alignment::Center),
@@ -102,6 +138,8 @@ pub fn vista(t: &Tokens, dispositivos: &Option<Dispositivos>, recientes: &[Traba
     };
 
     column![tarjeta_dispositivo, accesos, recientes_ui]
+        .push(boton_secundario(t, "Actualizar dispositivos", Mensaje::RefrescarDispositivos))
+        .push(text("El estado de la cola no garantiza que haya papel o conexión física. No se estiman niveles de tinta.").size(11))
         .spacing(10.0)
         .into()
 }

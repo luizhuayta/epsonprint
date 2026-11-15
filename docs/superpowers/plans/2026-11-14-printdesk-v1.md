@@ -283,3 +283,10 @@ device `epson2:libusb:003:012' is a Epson PID 1105 flatbed scanner
 - Cobertura del spec: Inicio (T8), Imprimir (T9), Escanear (T10), Herramientas/DNI (T6+T11), identidad/tema (T1), instalador (T12), estados reales sin inventar (T2+T8), fases 2 fuera (mejoras-futuras.md). Sin huecos.
 - Los pasos de UI sin test automático se verifican compilando + uso manual; la lógica que puede romperse vive toda en `nucleo` con tests (Review Focus anclado).
 - Tipos compartidos (`PaginaEscaneada`, `OpcionesImpresion`) definidos una vez y consumidos por nombre en tareas vecinas.
+
+## Estado de ejecución
+
+- Implementadas tareas 1–12; registro técnico en el ledger del plan mientras dura la ejecución.
+- Tarea 13 pendiente: pruebas físicas con Luis y Epson L375 preparada. No se consume papel ni se capturan documentos personales en las pruebas automáticas.
+- Stack efectivo: Iced 0.14, exprim 0.4, printpdf 0.12.9, image, rfd, dirs, chrono, tempfile; serde/serde_json para historial; iced_test solo para desarrollo. Inter y su licencia están en `assets/`.
+- Diferencias justificadas en la sección «Precisiones verificadas durante la construcción» del diseño: CUPS con vocabulario del PPD, foto 4×6, sesiones de DPI fijo y limitación de arrastre de archivos en Wayland.

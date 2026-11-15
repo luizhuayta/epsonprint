@@ -9,12 +9,12 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
+use exprim::RenderSession;
 use exprim::print::spool::{PrinterId, Spooler};
 use exprim::print::{
-    ComposeOptions, Margins, Orientation, PageRange, PaperSize, PrintJob, PrintOptions, Scaling,
-    compose_sheet, impose, preview_sheets, PreviewOptions,
+    ComposeOptions, Margins, Orientation, PageRange, PaperSize, PreviewOptions, PrintJob,
+    PrintOptions, Scaling, compose_sheet, impose, preview_sheets,
 };
-use exprim::RenderSession;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Papel {
@@ -105,8 +105,8 @@ impl OpcionesImpresion {
                 Papel::Letter => PaperSize::Letter,
                 // 10×15 cm en puntos (1 pt = 1/72"): 283.46 × 425.20.
                 Papel::Foto10x15 => PaperSize::Custom {
-                    width: 283.46,
-                    height: 425.20,
+                    width: 288.0,
+                    height: 432.0,
                 },
             },
             orientation: match self.orientacion {
@@ -121,7 +121,7 @@ impl OpcionesImpresion {
             scaling: match self.escala {
                 Escala::Ajustar => Scaling::FitToPage,
                 Escala::Real => Scaling::ActualSize,
-                Escala::Porcentaje(p) => Scaling::Percent(f64::from(p)),
+                Escala::Porcentaje(p) => Scaling::Percent(f64::from(p) / 100.0),
             },
             range: match &self.rango {
                 Rango::Todas => PageRange::All,
@@ -206,7 +206,14 @@ pub fn previsualizar(pdf: &[u8], opts: &OpcionesImpresion) -> Result<Vec<Vec<u8>
     let job = PrintJob::from_session(&session, opts.a_print_options())?;
     let sheets = impose(&job, Margins::ZERO)?;
     let mut hojas = Vec::with_capacity(sheets.len());
-    for png in preview_sheets(&session, &sheets, PreviewOptions::default()) {
+    for png in preview_sheets(
+        &session,
+        &sheets,
+        PreviewOptions {
+            grayscale: opts.color == ColorImp::BlancoNegro,
+            ..Default::default()
+        },
+    ) {
         hojas.push(png?);
     }
     Ok(hojas)
@@ -222,13 +229,8 @@ pub fn imprimir(
 ) -> Result<String, ErrorImpresion> {
     let bytes: Arc<[u8]> = doc.into();
     let impresora = PrinterId(String::from(impresora));
-    let trabajo = exprim::print::print_document(
-        spooler,
-        &impresora,
-        titulo,
-        bytes,
-        &opts.a_print_options(),
-    )?;
+    let trabajo =
+        exprim::print::print_document(spooler, &impresora, titulo, bytes, &opts.a_print_options())?;
     Ok(trabajo.id.0)
 }
 
@@ -241,7 +243,9 @@ pub fn imprimir_cups(
     opts: &OpcionesImpresion,
     binario_lp: &str,
     dir_tmp: &Path,
+    driver: &str,
 ) -> Result<String, ErrorImpresion> {
+    let opciones_driver = opciones_driver(driver, opts).map_err(ErrorImpresion::Lp)?;
     let bytes: Arc<[u8]> = doc.into();
     let session = RenderSession::open(bytes, None)?;
     let job = PrintJob::from_session(&session, opts.a_print_options())?;
@@ -249,7 +253,14 @@ pub fn imprimir_cups(
 
     let mut archivos = Vec::with_capacity(sheets.len());
     for (n, sheet) in sheets.iter().enumerate() {
-        let raster = compose_sheet(&session, sheet, &ComposeOptions::default())?;
+        let raster = compose_sheet(
+            &session,
+            sheet,
+            &ComposeOptions {
+                grayscale: opts.color == ColorImp::BlancoNegro,
+                ..Default::default()
+            },
+        )?;
         let ruta = dir_tmp.join(format!("hoja-{n:04}.png"));
         escribir_png(&ruta, &raster)?;
         archivos.push(ruta);
@@ -260,10 +271,23 @@ pub fn imprimir_cups(
     if !titulo.is_empty() {
         cmd.arg("-t").arg(titulo);
     }
-    cmd.arg("-o").arg(format!("print-quality={}", calidad_ipp(opts.calidad)));
-    cmd.arg("-o").arg(format!("print-color-mode={}", color_ipp(opts.color)));
+    cmd.arg("-o")
+        .arg(format!("print-quality={}", calidad_ipp(opts.calidad)));
+    cmd.arg("-o")
+        .arg(format!("print-color-mode={}", color_ipp(opts.color)));
     cmd.arg("-o").arg("sides=one-sided");
-    cmd.arg("-o").arg(format!("media={}", media_ipp(opts.papel)));
+    cmd.arg("-o").arg("print-scaling=none");
+    cmd.arg("-o")
+        .arg(if opts.orientacion == Orientacion::Horizontal {
+            "orientation-requested=4"
+        } else {
+            "orientation-requested=3"
+        });
+    cmd.arg("-o")
+        .arg(format!("media={}", media_ipp(opts.papel)));
+    for opcion in opciones_driver {
+        cmd.arg("-o").arg(opcion);
+    }
     if opts.copias > 1 {
         cmd.arg("-n").arg(opts.copias.to_string());
         cmd.arg("-o").arg("Collate=True");
@@ -271,7 +295,9 @@ pub fn imprimir_cups(
     for archivo in &archivos {
         cmd.arg(archivo);
     }
-    let salida = cmd.output().map_err(|e| ErrorImpresion::Lp(e.to_string()))?;
+    let salida = cmd
+        .output()
+        .map_err(|e| ErrorImpresion::Lp(e.to_string()))?;
     if !salida.status.success() {
         return Err(ErrorImpresion::Lp(
             String::from_utf8_lossy(&salida.stderr).trim().to_string(),
@@ -279,6 +305,37 @@ pub fn imprimir_cups(
     }
     let stdout = String::from_utf8_lossy(&salida.stdout);
     id_de_trabajo(&stdout).ok_or_else(|| ErrorImpresion::Lp("sin id de trabajo".into()))
+}
+
+/// La L375 usa vocabulario propio del PPD, no basta con print-quality de IPP.
+pub fn opciones_driver(driver: &str, opts: &OpcionesImpresion) -> Result<Vec<String>, String> {
+    if !driver.contains("MediaType/") || !driver.contains("PLAIN_NORMAL") {
+        return Ok(vec![]);
+    }
+    let tipo =
+        match opts.calidad {
+            Calidad::Alta => "PLAIN_HIGH",
+            Calidad::Normal => "PLAIN_NORMAL",
+            Calidad::Borrador => return Err(
+                "El controlador L375 no ofrece Borrador para papel normal; elige Normal o Alta."
+                    .into(),
+            ),
+        };
+    let tinta = if opts.color == ColorImp::BlancoNegro {
+        "MONO"
+    } else {
+        "COLOR"
+    };
+    let papel = match opts.papel {
+        Papel::A4 => "A4",
+        Papel::Letter => "Letter",
+        Papel::Foto10x15 => "4X6FULL",
+    };
+    Ok(vec![
+        format!("MediaType={tipo}"),
+        format!("Ink={tinta}"),
+        format!("PageSize={papel}"),
+    ])
 }
 
 fn calidad_ipp(c: Calidad) -> u8 {
@@ -310,13 +367,15 @@ fn media_ipp(p: Papel) -> String {
 fn id_de_trabajo(stdout: &str) -> Option<String> {
     stdout
         .split_whitespace()
-        .filter(|t| t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '(' || c == ')'))
         .rfind(|t| {
             matches!(t.rsplit_once('-'), Some((nombre, digitos)) if !nombre.is_empty()
                 && !digitos.is_empty()
                 && digitos.chars().all(|c| c.is_ascii_digit()))
         })
-        .map(|t| t.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-').to_string())
+        .map(|t| {
+            t.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+                .to_string()
+        })
 }
 
 fn escribir_png(ruta: &Path, raster: &exprim::print::SheetRaster) -> std::io::Result<()> {
@@ -337,6 +396,37 @@ fn escribir_png(ruta: &Path, raster: &exprim::print::SheetRaster) -> std::io::Re
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn usa_opciones_reales_del_controlador_epson() {
+        let driver = include_str!("../../tests/fixtures/l375-opciones.txt");
+        let mut opts = OpcionesImpresion::predeterminadas();
+        opts.calidad = Calidad::Alta;
+        opts.color = ColorImp::BlancoNegro;
+        let args = opciones_driver(driver, &opts).unwrap();
+        assert!(args.contains(&"MediaType=PLAIN_HIGH".to_string()));
+        assert!(args.contains(&"Ink=MONO".to_string()));
+        opts.calidad = Calidad::Borrador;
+        assert!(
+            opciones_driver(driver, &opts).is_err(),
+            "el driver no ofrece borrador para papel normal"
+        );
+    }
+
+    #[test]
+    fn porcentaje_es_factor_no_numero_entero() {
+        let mut opts = OpcionesImpresion::predeterminadas();
+        opts.escala = Escala::Porcentaje(80.0);
+        assert_eq!(opts.a_print_options().scaling, Scaling::Percent(0.8));
+    }
+
+    #[test]
+    fn id_real_de_epson_en_espanol() {
+        assert_eq!(
+            id_de_trabajo("el id de la solicitud es Epson_L375-42 (1 archivo(s))"),
+            Some("Epson_L375-42".into())
+        );
+    }
 
     /// PDF de 3 páginas A4 vacío, a mano: exprim reconstruye el xref roto.
     fn pdf_3_paginas() -> Vec<u8> {
@@ -371,10 +461,7 @@ mod tests {
             parsear_rango("2-5,8", 8).unwrap(),
             Rango::Paginas(vec![(2, 5), (8, 8)])
         );
-        assert_eq!(
-            parsear_rango("3", 8).unwrap(),
-            Rango::Paginas(vec![(3, 3)])
-        );
+        assert_eq!(parsear_rango("3", 8).unwrap(), Rango::Paginas(vec![(3, 3)]));
     }
 
     #[test]
@@ -451,6 +538,7 @@ mod tests {
             &OpcionesImpresion::predeterminadas(),
             &lp,
             dir.path(),
+            "",
         )
         .expect("imprimir cups");
         assert_eq!(id, "Fake-7");
@@ -470,7 +558,16 @@ mod tests {
         opts.color = ColorImp::BlancoNegro;
         opts.copias = 2;
         opts.escala = Escala::Porcentaje(80.0);
-        imprimir_cups("Epson_L375", &pdf_3_paginas(), "t", &opts, &lp, dir.path()).unwrap();
+        imprimir_cups(
+            "Epson_L375",
+            &pdf_3_paginas(),
+            "t",
+            &opts,
+            &lp,
+            dir.path(),
+            "",
+        )
+        .unwrap();
         let args = fs::read_to_string(&captura).unwrap();
         assert!(args.contains("print-quality=3"), "borrador: {args}");
         assert!(args.contains("print-color-mode=monochrome"), "{args}");

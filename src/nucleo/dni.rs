@@ -72,8 +72,12 @@ impl AsistenteDni {
                 self.reverso = Some(p);
                 self.paso = PasoDni::Completo;
             }
-            (PasoDni::EscaneandoAnverso, MensajeDni::Fallo) => self.paso = PasoDni::EsperandoAnverso,
-            (PasoDni::EscaneandoReverso, MensajeDni::Fallo) => self.paso = PasoDni::EsperandoReverso,
+            (PasoDni::EscaneandoAnverso, MensajeDni::Fallo) => {
+                self.paso = PasoDni::EsperandoAnverso
+            }
+            (PasoDni::EscaneandoReverso, MensajeDni::Fallo) => {
+                self.paso = PasoDni::EsperandoReverso
+            }
             (PasoDni::Completo, MensajeDni::Repetir) => {
                 self.reverso = None;
                 self.paso = PasoDni::EsperandoReverso;
@@ -86,16 +90,14 @@ impl AsistenteDni {
             }
             // Repetir: descartar lo capturado de la cara actual (o todo si
             // aún no hay reverso).
-            (paso, MensajeDni::Repetir) => {
-                match paso {
-                    PasoDni::EsperandoReverso | PasoDni::EscaneandoReverso => {
-                        self.anverso = None;
-                        self.reverso = None;
-                        self.paso = PasoDni::EsperandoAnverso;
-                    }
-                    _ => {}
+            (paso, MensajeDni::Repetir) => match paso {
+                PasoDni::EsperandoReverso | PasoDni::EscaneandoReverso => {
+                    self.anverso = None;
+                    self.reverso = None;
+                    self.paso = PasoDni::EsperandoAnverso;
                 }
-            }
+                _ => {}
+            },
             // Cancelar: siempre al principio, limpio.
             (_, MensajeDni::Cancelar) => {
                 self.anverso = None;
@@ -113,7 +115,10 @@ mod tests {
     use super::*;
 
     fn pagina_de_prueba() -> PaginaEscaneada {
-        PaginaEscaneada { png: vec![1, 2, 3], rotacion: 0 }
+        PaginaEscaneada {
+            png: vec![1, 2, 3],
+            rotacion: 0,
+        }
     }
 
     #[test]

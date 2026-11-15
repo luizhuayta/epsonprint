@@ -3,8 +3,8 @@
 
 use std::io::Read;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::pdfsal::PaginaEscaneada;
@@ -90,9 +90,7 @@ pub fn escanear(
                 hijo = Some(h);
                 break;
             }
-            Err(e)
-                if e.raw_os_error() == Some(26) && intento < 2 =>
-            {
+            Err(e) if e.raw_os_error() == Some(26) && intento < 2 => {
                 std::thread::sleep(Duration::from_millis(120));
             }
             Err(e) => return Err(ErrorEscaneo::Scanimage(e.to_string())),
@@ -128,11 +126,17 @@ pub fn escanear(
         let _ = hijo.wait();
         return Err(ErrorEscaneo::Cancelado);
     }
-    let bytes = lector.join().map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
+    let bytes = lector
+        .join()
+        .map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
         .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
-    let stderr = errores.join().map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
+    let stderr = errores
+        .join()
+        .map_err(|_| ErrorEscaneo::Scanimage("lector interrumpido".into()))?
         .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
-    let estado = hijo.wait().map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
+    let estado = hijo
+        .wait()
+        .map_err(|e| ErrorEscaneo::Scanimage(e.to_string()))?;
     if !estado.success() {
         return Err(ErrorEscaneo::Scanimage(
             String::from_utf8_lossy(&stderr).trim().to_string(),
@@ -194,8 +198,13 @@ mod tests {
     fn binario_falso_devuelve_pagina() {
         let dir = tempfile::tempdir().unwrap();
         let bin = script_falso(dir.path(), "scanimage-falso", "printf 'PNG-falso'");
-        let pagina = escanear("dev", &OpcionesEscaneo::predeterminadas(), Arc::new(AtomicBool::new(false)), &bin)
-            .expect("escanear");
+        let pagina = escanear(
+            "dev",
+            &OpcionesEscaneo::predeterminadas(),
+            Arc::new(AtomicBool::new(false)),
+            &bin,
+        )
+        .expect("escanear");
         assert_eq!(pagina.png, b"PNG-falso");
         assert_eq!(pagina.rotacion, 0);
     }
@@ -218,7 +227,11 @@ mod tests {
             matches!(res, Err(ErrorEscaneo::Cancelado)),
             "resultado: {res:?}"
         );
-        assert!(inicio.elapsed() < Duration::from_secs(3), "tardó {:?}", inicio.elapsed());
+        assert!(
+            inicio.elapsed() < Duration::from_secs(3),
+            "tardó {:?}",
+            inicio.elapsed()
+        );
     }
 
     #[test]
@@ -239,8 +252,17 @@ mod tests {
     #[test]
     fn binario_que_falla_es_error_claro() {
         let dir = tempfile::tempdir().unwrap();
-        let bin = script_falso(dir.path(), "scanimage-error", "echo 'backend busy' >&2; exit 1");
-        let res = escanear("dev", &OpcionesEscaneo::predeterminadas(), Arc::new(AtomicBool::new(false)), &bin);
+        let bin = script_falso(
+            dir.path(),
+            "scanimage-error",
+            "echo 'backend busy' >&2; exit 1",
+        );
+        let res = escanear(
+            "dev",
+            &OpcionesEscaneo::predeterminadas(),
+            Arc::new(AtomicBool::new(false)),
+            &bin,
+        );
         match res {
             Err(ErrorEscaneo::Scanimage(msg)) => assert!(msg.contains("backend busy"), "{msg}"),
             otro => panic!("esperaba Scanimage, llegó {otro:?}"),

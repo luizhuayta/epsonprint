@@ -8,6 +8,7 @@ pub struct Impresora {
     pub nombre: String,
     pub por_defecto: bool,
     pub acepta: bool,
+    pub driver: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,24 +34,30 @@ pub fn impresoras() -> Vec<Impresora> {
             nombre: p.id.as_str().to_string(),
             por_defecto: p.is_default,
             acepta: p.accepting_jobs,
+            driver: Command::new("timeout")
+                .args(["10s", "lpoptions", "-p", p.id.as_str(), "-l"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default(),
         })
         .collect()
 }
 
 /// Escáneres SANE, sin cámaras (v4l).
 pub fn escaners() -> Vec<Escaner> {
-    let binario =
-        std::env::var("PRINTDESK_SCANIMAGE").unwrap_or_else(|_| "scanimage".to_string());
+    let binario = std::env::var("PRINTDESK_SCANIMAGE").unwrap_or_else(|_| "scanimage".to_string());
     escaners_con(&binario)
 }
 
 /// Igual que `escaners` con el binario `scanimage` elegido (tests: falso).
 pub fn escaners_con(binario: &str) -> Vec<Escaner> {
-    let salida = Command::new(binario).arg("-L").output();
+    let salida = Command::new("timeout")
+        .args(["10s", binario, "-L"])
+        .output();
     match salida {
-        Ok(o) if o.status.success() => {
-            parsear_scanimage_l(&String::from_utf8_lossy(&o.stdout))
-        }
+        Ok(o) if o.status.success() => parsear_scanimage_l(&String::from_utf8_lossy(&o.stdout)),
         _ => Vec::new(),
     }
 }

@@ -1,19 +1,20 @@
-# Mejoras futuras de EpsonPrint
+# PrintDesk — mejoras posteriores
 
-Lo que **no** entra en la v1, a propósito. Aquí queda apuntado para decidir más adelante.
-El diseño de la v1 no cierra la puerta a ninguna de estas.
+## Segunda fase acordada
 
-| Mejora | Qué aporta | Qué haría falta | Tamaño orientativo |
-|---|---|---|---|
-| **Dúplex manual guiado (imprimir)** | Imprimir a dos caras: la app imprime las hojas impares, te dice «voltea el papel» y sigue con las pares en orden inverso. | Partir el trabajo en dos (impares/pares), UI de pausa entre tandas, decidir borde de volteo. Ojo con copias múltiples. | Media — parecida al flujo dos caras de escaneo |
-| **Imprimir Excel/Word** | Cargar `.xlsx`/`.docx` directamente y que se impriman. | Convertir a PDF por dentro con LibreOffice (`soffice --headless --convert-to pdf`) ya instalado; la app ya imprime PDF. | Pequeña |
-| **Recorte automático del escaneo** | Que el DNI ocupe su tamaño real en el PDF, no una hoja A4 casi blanca. | Detección de bordes blancos al guardar (recortar márgenes vacíos). | Pequeña-media |
-| **Fuente ADF** (si el driver la expone) | Cargar varias hojas del alimentador de golpe. | Comprobar si `scanimage` expone fuente ADF en la L375; si no, no es posible. | Pequeña (si el driver lo permite) |
-| **OCR de los escaneos** | Buscar texto dentro de los PDF escaneados. | Motor OCR (p. ej. Tesseract) integrado como subproceso. | Media |
-| **Niveles de tinta** | Ver cuánta tinta queda sin abrir la web de la impresora. | Consultar el estado IPP de la impresora (la L375 lo responde por la red). | Pequeña-media |
-| **Cola de impresión visible** | Ver/cancelar trabajos enviados desde la app. | Leer `lpstat -o` y `cancel`; ya existe en exprim. | Pequeña |
-| **Vista previa con zoom y páginas múltiples** | Repasar un PDF largo cómodamente antes de imprimir. | Paginación de miniaturas y zoom en la pestaña Imprimir. | Pequeña |
-| **Tema/estilo propio** | Que la app tenga un look más cuidado. | Colores y tipografía de egui. | Pequeña |
+- **Recorte inteligente**: detectar o seleccionar el documento dentro del A4. Incluye composición de las dos caras del DNI sobre una hoja si se necesita.
+- **Word y Excel**: convertir con LibreOffice a PDF en un directorio temporal privado, sin alterar el archivo original. Comprobar fidelidad de tablas/fuentes.
+- **Dúplex manual guiado**: tandas impares/pares, pausa para voltear, orden de salida y copias múltiples. La L375 no tiene dúplex automático.
 
-Sugerencia de orden cuando toque: **Excel/Word** y **recorte automático** son las que
-más se notan con menos esfuerzo; el dúplex manual guiado es la gran pieza siguiente.
+## Otras mejoras posibles, no comprometidas
+
+- OCR con Tesseract para PDF con texto buscable.
+- Cola de impresión con seguimiento y cancelación de trabajos. «CUPS aceptó» no significa «se imprimió físicamente».
+- Detección de dispositivos periódica y exposición de los motivos detallados del backend.
+- Mejoras de accesibilidad y atajos del visor; persistir preferencias y sesiones al cerrar.
+- Mezclar distintas resoluciones en una misma sesión sin cambiar tamaños físicos.
+- Mejor rendimiento en documentos de cientos de páginas: vista previa incremental y caché limitada.
+- Arrastrar archivos en Wayland cuando lo admita el backend de ventanas.
+- Portar a otros sistemas sin confundir CUPS/SANE con controladores de Windows.
+
+ADF y niveles de tinta solo deben añadirse si el **hardware y el controlador** los anuncian. No asumir que la L375 dispone de ellos.
