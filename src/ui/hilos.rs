@@ -12,8 +12,11 @@ use iced::stream;
 
 struct Datos<T> {
     id: u64,
-    f: Arc<Mutex<Option<Box<dyn FnOnce() -> T + Send>>>>,
+    f: CajaDeTrabajo<T>,
 }
+
+/// El trabajo pendiente de lanzar, compartido con el stream de la suscripción.
+type CajaDeTrabajo<T> = Arc<Mutex<Option<Box<dyn FnOnce() -> T + Send>>>>;
 
 impl<T> Hash for Datos<T> {
     fn hash<H: Hasher>(&self, estado: &mut H) {

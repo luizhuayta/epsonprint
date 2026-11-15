@@ -228,7 +228,7 @@ pub fn cargar_ruta(ruta: &std::path::Path) -> Result<Documento, String> {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "documento".into());
-    let bytes = std::fs::read(&ruta).map_err(|e| format!("no se pudo leer: {e}"))?;
+    let bytes = std::fs::read(ruta).map_err(|e| format!("no se pudo leer: {e}"))?;
     let bytes = if bytes.starts_with(b"%PDF-") {
         bytes
     } else {
@@ -299,10 +299,11 @@ pub fn update(estado: &mut EstadoImprimir, mensaje: MensajeImprimir, dir_datos: 
         }
         MensajeImprimir::PorcentajeEditado(texto) => {
             estado.porcentaje = texto.clone();
-            if let Ok(p) = texto.parse::<f32>() {
-                if p.is_finite() && (1.0..=400.0).contains(&p) {
-                    estado.opciones.escala = Escala::Porcentaje(p);
-                }
+            if let Ok(p) = texto.parse::<f32>()
+                && p.is_finite()
+                && (1.0..=400.0).contains(&p)
+            {
+                estado.opciones.escala = Escala::Porcentaje(p);
             }
             true
         }

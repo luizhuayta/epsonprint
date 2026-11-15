@@ -29,17 +29,6 @@ pub enum Pagina {
     Herramientas,
 }
 
-impl Pagina {
-    pub fn titulo(self) -> &'static str {
-        match self {
-            Pagina::Inicio => "Inicio",
-            Pagina::Imprimir => "Imprimir",
-            Pagina::Escanear => "Escanear",
-            Pagina::Herramientas => "Herramientas",
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum Mensaje {
     Ir(Pagina),
@@ -270,34 +259,34 @@ pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
             );
         }
         // Envío real a CUPS.
-        if estado.imp.imprimiendo {
-            if let Some(impresora) = impresora_actual(estado) {
-                let driver = estado
-                    .dispositivos
-                    .as_ref()
-                    .and_then(|d| d.impresoras.iter().find(|p| p.nombre == impresora))
-                    .map(|p| p.driver.clone())
-                    .unwrap_or_default();
-                let bytes = doc.bytes.clone();
-                let titulo = doc.nombre.clone();
-                let opts = estado.imp.opciones.clone();
-                lotes.push(
-                    hilos::trabajo(2000 + estado.imp.id_impresion, move || {
-                        let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
-                        nucleo_impresion::imprimir_cups(
-                            &impresora,
-                            &bytes,
-                            &titulo,
-                            &opts,
-                            "lp",
-                            tmp.path(),
-                            &driver,
-                        )
-                        .map_err(|e| e.to_string())
-                    })
-                    .map(|res| Mensaje::Imprimir(MI::Impreso(res))),
-                );
-            }
+        if estado.imp.imprimiendo
+            && let Some(impresora) = impresora_actual(estado)
+        {
+            let driver = estado
+                .dispositivos
+                .as_ref()
+                .and_then(|d| d.impresoras.iter().find(|p| p.nombre == impresora))
+                .map(|p| p.driver.clone())
+                .unwrap_or_default();
+            let bytes = doc.bytes.clone();
+            let titulo = doc.nombre.clone();
+            let opts = estado.imp.opciones.clone();
+            lotes.push(
+                hilos::trabajo(2000 + estado.imp.id_impresion, move || {
+                    let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
+                    nucleo_impresion::imprimir_cups(
+                        &impresora,
+                        &bytes,
+                        &titulo,
+                        &opts,
+                        "lp",
+                        tmp.path(),
+                        &driver,
+                    )
+                    .map_err(|e| e.to_string())
+                })
+                .map(|res| Mensaje::Imprimir(MI::Impreso(res))),
+            );
         }
     }
 
@@ -317,22 +306,21 @@ pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
         _ => None,
     }));
 
-    if estado.scan.escaneando {
-        if let Some(dispositivo) = estado
+    if estado.scan.escaneando
+        && let Some(dispositivo) = estado
             .dispositivos
             .as_ref()
             .and_then(|d| d.escaners.first())
-        {
-            let id = dispositivo.id.clone();
-            let opts = estado.scan.opciones;
-            let cancel = estado.scan.cancel.clone();
-            lotes.push(
-                hilos::trabajo(4000 + estado.scan.id, move || {
-                    escanear::capturar(id, opts, cancel)
-                })
-                .map(|res| Mensaje::Escanear(escanear::MensajeEscanear::Lista(res))),
-            );
-        }
+    {
+        let id = dispositivo.id.clone();
+        let opts = estado.scan.opciones;
+        let cancel = estado.scan.cancel.clone();
+        lotes.push(
+            hilos::trabajo(4000 + estado.scan.id, move || {
+                escanear::capturar(id, opts, cancel)
+            })
+            .map(|res| Mensaje::Escanear(escanear::MensajeEscanear::Lista(res))),
+        );
     }
     if estado.scan.guardando {
         let paginas: Vec<_> = estado
@@ -355,25 +343,24 @@ pub fn subscription(estado: &Estado) -> Subscription<Mensaje> {
             .map(|res| Mensaje::Escanear(escanear::MensajeEscanear::Guardado(res))),
         );
     }
-    if estado.dni.escaneando() {
-        if let Some(d) = estado
+    if estado.dni.escaneando()
+        && let Some(d) = estado
             .dispositivos
             .as_ref()
             .and_then(|d| d.escaners.first())
-        {
-            let id = d.id.clone();
-            let cancel = estado.dni.cancel.clone();
-            lotes.push(
-                hilos::trabajo(6000 + estado.dni.id, move || {
-                    escanear::capturar(
-                        id,
-                        crate::nucleo::escaneo::OpcionesEscaneo::predeterminadas(),
-                        cancel,
-                    )
-                })
-                .map(|res| Mensaje::Herramientas(herramientas::MensajeHerramientas::Lista(res))),
-            );
-        }
+    {
+        let id = d.id.clone();
+        let cancel = estado.dni.cancel.clone();
+        lotes.push(
+            hilos::trabajo(6000 + estado.dni.id, move || {
+                escanear::capturar(
+                    id,
+                    crate::nucleo::escaneo::OpcionesEscaneo::predeterminadas(),
+                    cancel,
+                )
+            })
+            .map(|res| Mensaje::Herramientas(herramientas::MensajeHerramientas::Lista(res))),
+        );
     }
     if estado.dni.guardando {
         let paginas: Vec<_> = [
@@ -478,95 +465,7 @@ pub fn theme(e: &Estado) -> iced::Theme {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn suscripcion_de_preview_conserva_identificador() {
-        let mut e = boot();
-        e.dispositivos = Some(Dispositivos::default());
-        e.imp.documento = Some(imprimir::Documento {
-            nombre: "prueba.pdf".into(),
-            bytes: vec![],
-            paginas: 1,
-            ruta: PathBuf::from("prueba.pdf"),
-        });
-        e.imp.previsualizando = true;
-        e.imp.id_preview = 7;
-        assert!(subscription(&e).units() >= 1);
-    }
-    #[test]
-    fn navegacion_y_cambio_de_tema_por_click() {
-        let mut e = boot();
-        e.dispositivos = Some(Dispositivos::default());
-        e.recientes.clear();
-        let mut sim = iced_test::simulator(view(&e));
-        sim.click("Escanear").unwrap();
-        let mensajes: Vec<_> = sim.into_messages().collect();
-        for m in mensajes {
-            let _ = update(&mut e, m);
-        }
-        assert_eq!(e.pagina, Pagina::Escanear);
-        let mut sim = iced_test::simulator(view(&e));
-        sim.click("Modo oscuro").unwrap();
-        for m in sim.into_messages() {
-            let _ = update(&mut e, m);
-        }
-        assert!(e.modo_oscuro);
-        assert!(
-            iced_test::simulator(view(&e))
-                .find("Escanear página")
-                .is_ok()
-        );
-    }
-
-    #[test]
-    fn cerrar_con_paginas_pide_confirmacion() {
-        let mut e = boot();
-        e.scan.escaneando = true;
-        let _ = update(&mut e, Mensaje::SolicitarCerrar);
-        assert!(e.confirmar_cierre);
-    }
-
-    #[test]
-    #[ignore = "renderiza capturas headless para revisión visual"]
-    fn capturas_pantallas_claras_y_oscuras() {
-        for oscuro in [false, true] {
-            for pagina in [
-                Pagina::Inicio,
-                Pagina::Imprimir,
-                Pagina::Escanear,
-                Pagina::Herramientas,
-            ] {
-                let mut e = boot();
-                e.dispositivos = Some(Dispositivos::default());
-                e.recientes.clear();
-                e.pagina = pagina;
-                e.modo_oscuro = oscuro;
-                let settings = iced::Settings {
-                    fonts: vec![
-                        include_bytes!("../../assets/Inter-Regular.ttf")
-                            .as_slice()
-                            .into(),
-                    ],
-                    default_font: iced::Font::with_name("Inter"),
-                    ..Default::default()
-                };
-                let mut sim = iced_test::Simulator::with_size(
-                    settings,
-                    iced::Size::new(1080.0, 720.0),
-                    view(&e),
-                );
-                let snapshot = sim.snapshot(&theme(&e)).unwrap();
-                let path = format!(
-                    "/tmp/opencode/printdesk-{:?}-{}",
-                    pagina,
-                    if oscuro { "oscuro" } else { "claro" }
-                );
-                assert!(snapshot.matches_image(path).unwrap());
-            }
-        }
-    }
-}
+mod tests;
 
 fn barra_lateral<'a>(t: &Tokens, actual: Pagina) -> Element<'a, Mensaje> {
     let nav = |etiqueta: &str, pagina: Pagina| {

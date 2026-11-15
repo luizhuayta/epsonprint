@@ -6,8 +6,9 @@
 
 use super::pdfsal::PaginaEscaneada;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum PasoDni {
+    #[default]
     EsperandoAnverso,
     EscaneandoAnverso,
     EsperandoReverso,
@@ -29,12 +30,6 @@ pub struct AsistenteDni {
     paso: PasoDni,
     anverso: Option<PaginaEscaneada>,
     reverso: Option<PaginaEscaneada>,
-}
-
-impl Default for PasoDni {
-    fn default() -> Self {
-        PasoDni::EsperandoAnverso
-    }
 }
 
 impl AsistenteDni {
@@ -90,14 +85,11 @@ impl AsistenteDni {
             }
             // Repetir: descartar lo capturado de la cara actual (o todo si
             // aún no hay reverso).
-            (paso, MensajeDni::Repetir) => match paso {
-                PasoDni::EsperandoReverso | PasoDni::EscaneandoReverso => {
-                    self.anverso = None;
-                    self.reverso = None;
-                    self.paso = PasoDni::EsperandoAnverso;
-                }
-                _ => {}
-            },
+            (PasoDni::EsperandoReverso | PasoDni::EscaneandoReverso, MensajeDni::Repetir) => {
+                self.anverso = None;
+                self.reverso = None;
+                self.paso = PasoDni::EsperandoAnverso;
+            }
             // Cancelar: siempre al principio, limpio.
             (_, MensajeDni::Cancelar) => {
                 self.anverso = None;

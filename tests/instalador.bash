@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=$(mktemp -d "${TMPDIR:-/tmp/opencode}/printdesk-install.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/printdesk-install.XXXXXX")
 trap 'rm -rf -- "$tmp"' EXIT
 mkdir -p "$tmp/proyecto/assets" "$tmp/proyecto/target/release" "$tmp/casa con espacios"
 cp "$repo/instalar.sh" "$tmp/proyecto/"

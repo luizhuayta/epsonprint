@@ -47,6 +47,15 @@ pub enum ErrorEscaneo {
     Scanimage(String),
 }
 
+impl std::fmt::Display for ErrorEscaneo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorEscaneo::Cancelado => f.write_str("escaneo cancelado"),
+            ErrorEscaneo::Scanimage(m) => write!(f, "scanimage: {m}"),
+        }
+    }
+}
+
 /// Argumentos de `scanimage` para una página por la placa, PNG a stdout.
 pub fn args_scanimage(dispositivo: &str, o: &OpcionesEscaneo) -> Vec<String> {
     let modo = match o.modo {

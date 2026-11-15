@@ -1,0 +1,38 @@
+name: Reportar un fallo
+description: Algo no funciona al instalar, imprimir o escanear.
+title: "[Fallo] "
+body:
+  - type: markdown
+    attributes:
+      value: "No adjuntes DNI, documentos personales, credenciales ni escaneos privados. Usa un archivo de ejemplo sin datos sensibles."
+  - type: input
+    id: version
+    attributes:
+      label: Versión de PrintDesk
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: entorno
+    attributes:
+      label: Distribución Linux y sesión gráfica
+      placeholder: "Fedora, GNOME, Wayland"
+    validations:
+      required: true
+  - type: input
+    id: dispositivo
+    attributes:
+      label: Modelo de impresora o escáner
+      placeholder: "Epson EcoTank L375, USB"
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducir el fallo
+      description: Incluye qué esperabas y qué ocurrió realmente.
+    validations:
+      required: true
+  - type: textarea
+    id: mensaje
+    attributes:
+      label: Mensaje de error
+      description: Copia solo el mensaje relevante, revisando que no contenga datos personales.

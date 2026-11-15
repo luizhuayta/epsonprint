@@ -1,15 +1,15 @@
 //! Opciones de impresión, parseo de rango, vista previa y envío a CUPS.
 //!
-//! Ruling (2026-11-14): v1 imprime SIEMPRE componiendo hojas (exprim `impose`
-//! + `compose`) y las envía con `lp`. Así la vista previa y lo impreso son
-//! exactamente lo mismo, y «Calidad» (`print-quality`), que exprim 0.4 no puede
-//! transportar en `SpoolJob`, llega de verdad a la impresora.
+//! En v1 se componen las hojas con exprim y se envían con `lp`.
+//! La vista previa comparte la geometría del trabajo, y las opciones del
+//! controlador incluyen la calidad que `SpoolJob` no transporta.
 
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
 use exprim::RenderSession;
+#[cfg(test)]
 use exprim::print::spool::{PrinterId, Spooler};
 use exprim::print::{
     ComposeOptions, Margins, Orientation, PageRange, PaperSize, PreviewOptions, PrintJob,
@@ -220,6 +220,7 @@ pub fn previsualizar(pdf: &[u8], opts: &OpcionesImpresion) -> Result<Vec<Vec<u8>
 }
 
 /// Envío genérico a través de un spooler exprim (tests: `FileSpooler`).
+#[cfg(test)]
 pub fn imprimir(
     spooler: &dyn Spooler,
     impresora: &str,

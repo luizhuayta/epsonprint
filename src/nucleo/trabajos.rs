@@ -75,6 +75,15 @@ impl From<serde_json::Error> for ErrorTrabajos {
     }
 }
 
+impl std::fmt::Display for ErrorTrabajos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorTrabajos::Escribir(e) => write!(f, "no se pudo guardar el historial ({e})"),
+            ErrorTrabajos::Serializar(e) => write!(f, "historial corrupto ({e})"),
+        }
+    }
+}
+
 const MAXIMO: usize = 20;
 
 fn fichero(dir: &Path) -> std::path::PathBuf {

@@ -1,5 +1,4 @@
 //! PDFs de salida: escaneos → un PDF, imagen → PDF de una página.
-use image::DynamicImage;
 use printpdf::{
     Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, RawImage, RawImageData, RawImageFormat,
     XObjectTransform,
@@ -23,6 +22,15 @@ pub enum ErrorPdf {
 impl From<std::io::Error> for ErrorPdf {
     fn from(e: std::io::Error) -> Self {
         ErrorPdf::Escribir(e)
+    }
+}
+
+impl std::fmt::Display for ErrorPdf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorPdf::Decodificar(e) => write!(f, "imagen no legible ({e})"),
+            ErrorPdf::Escribir(e) => write!(f, "no se pudo escribir ({e})"),
+        }
     }
 }
 
@@ -108,6 +116,7 @@ fn crear_pdf(paginas: &[PaginaEscaneada], dpi: u16) -> Result<Vec<u8>, ErrorPdf>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::DynamicImage;
     use image::ImageFormat;
     use std::io::Cursor as IoCursor;
     use std::sync::Arc;

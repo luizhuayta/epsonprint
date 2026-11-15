@@ -2,6 +2,11 @@
 name = "printdesk"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.100"
+description = "Aplicación de escritorio Linux para imprimir y escanear con CUPS y SANE"
+license = "MIT"
+repository = "https://github.com/luizhuayta/epsonprint"
+readme = "README.md"
 
 [dependencies]
 chrono = "0.4.45"
