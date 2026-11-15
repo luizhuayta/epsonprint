@@ -451,6 +451,65 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "aceptación física: imprime 2 hojas reales en Epson_L375"]
+    fn aceptacion_imprimir_dos_hojas() {
+        use crate::nucleo::pdfsal::PaginaEscaneada;
+        // Dos páginas distinguibles a simple vista: fondo índigo con bloque
+        // blanco (página 1) y rayas diagonales (página 2).
+        fn pagina(color: image::Rgba<u8>, rayas: bool) -> PaginaEscaneada {
+            use image::ImageBuffer;
+            let mut img = ImageBuffer::from_pixel(1240, 1754, color);
+            if rayas {
+                for y in 0..1754 {
+                    for x in 0..1240 {
+                        if (x + y) / 90 % 2 == 0 {
+                            img.put_pixel(x, y, image::Rgba([20, 20, 30, 255]));
+                        }
+                    }
+                }
+            } else {
+                for y in 500..1250 {
+                    for x in 300..940 {
+                        img.put_pixel(x, y, image::Rgba([255, 255, 255, 255]));
+                    }
+                }
+            }
+            let mut png = Vec::new();
+            image::DynamicImage::ImageRgba8(img)
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
+            PaginaEscaneada { png, rotacion: 0 }
+        }
+        let paginas = vec![
+            pagina(image::Rgba([76, 91, 245, 255]), false),
+            pagina(image::Rgba([255, 255, 255, 255]), true),
+        ];
+        let dir = tempfile::tempdir().unwrap();
+        let pdf_path = dir.path().join("aceptacion.pdf");
+        crate::nucleo::pdfsal::paginas_a_pdf(&paginas, &pdf_path, 150).unwrap();
+        let pdf = std::fs::read(&pdf_path).unwrap();
+
+        let driver = std::process::Command::new("lpoptions")
+            .args(["-p", "Epson_L375", "-l"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let opts = OpcionesImpresion::predeterminadas();
+        let id = imprimir_cups(
+            "Epson_L375",
+            &pdf,
+            "PrintDesk aceptación 1",
+            &opts,
+            "lp",
+            dir.path(),
+            &driver,
+        )
+        .expect("enviar a CUPS");
+        assert!(!id.is_empty(), "sin id de trabajo");
+        println!("trabajo enviado: {id}");
+    }
+
+    #[test]
     fn rango_todas() {
         assert_eq!(parsear_rango("todas", 8).unwrap(), Rango::Todas);
     }

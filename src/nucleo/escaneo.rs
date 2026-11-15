@@ -164,6 +164,80 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "aceptación física: escanea el cristal (vacío vale) y cancela un escaneo real"]
+    fn aceptacion_escanear_y_cancelar() {
+        use crate::nucleo::pdfsal;
+        use std::sync::atomic::Ordering;
+
+        // Dirección detectada en vivo: el bus USB renumera la impresora.
+        let listado = std::process::Command::new("scanimage")
+            .arg("-L")
+            .output()
+            .expect("scanimage -L");
+        assert!(listado.status.success(), "scanimage -L falló");
+        let escaners = crate::nucleo::dispositivos::parsear_scanimage_l(&String::from_utf8_lossy(
+            &listado.stdout,
+        ));
+        let dispositivo = escaners
+            .first()
+            .expect("no hay escáner conectado")
+            .id
+            .clone();
+        println!("escáner detectado: {dispositivo}");
+
+        // 1) Escaneo real a 150 dpi de lo que haya en el cristal.
+        let pagina = escanear(
+            &dispositivo,
+            &OpcionesEscaneo {
+                resolucion: 150,
+                ..OpcionesEscaneo::predeterminadas()
+            },
+            Arc::new(AtomicBool::new(false)),
+            "scanimage",
+        )
+        .expect("escaneo real");
+        assert!(
+            pagina.png.starts_with(b"\x89PNG"),
+            "el escaneo no devolvió PNG"
+        );
+
+        // 2) DNI simulado con el cristal: dos escaneos → un PDF de dos páginas.
+        let reverso = escanear(
+            &dispositivo,
+            &OpcionesEscaneo {
+                resolucion: 150,
+                ..OpcionesEscaneo::predeterminadas()
+            },
+            Arc::new(AtomicBool::new(false)),
+            "scanimage",
+        )
+        .expect("segundo escaneo");
+        let destino = dirs::home_dir()
+            .unwrap()
+            .join("Escaneos/DNI_aceptacion_fisica.pdf");
+        pdfsal::paginas_a_pdf(&[pagina, reverso], &destino, 150).expect("guardar DNI de prueba");
+        println!("DNI de prueba: {}", destino.display());
+
+        // 3) Cancelación real: 600 dpi y cancelar al segundo.
+        let cancel = Arc::new(AtomicBool::new(false));
+        let avisar = Arc::clone(&cancel);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(1));
+            avisar.store(true, Ordering::SeqCst);
+        });
+        let res = escanear(
+            &dispositivo,
+            &OpcionesEscaneo {
+                resolucion: 600,
+                ..OpcionesEscaneo::predeterminadas()
+            },
+            cancel,
+            "scanimage",
+        );
+        assert!(matches!(res, Err(ErrorEscaneo::Cancelado)), "{res:?}");
+    }
+
+    #[test]
     fn args_correctos() {
         let args = args_scanimage("epson2:libusb:001:002", &OpcionesEscaneo::predeterminadas());
         assert_eq!(

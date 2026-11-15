@@ -47,6 +47,11 @@ pub fn paginas_a_pdf(
     dpi: u16,
 ) -> Result<PathBuf, ErrorPdf> {
     let bytes = crear_pdf(paginas, dpi)?;
+    // El escaneo ya está hecho: si la carpeta de destino no existe, crearla
+    // antes de escribir (perder la página sería lo inaceptable).
+    if let Some(padre) = destino.parent() {
+        std::fs::create_dir_all(padre)?;
+    }
     std::fs::write(destino, bytes)?;
     Ok(destino.to_path_buf())
 }
